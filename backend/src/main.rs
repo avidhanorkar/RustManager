@@ -3,12 +3,14 @@ use mongodb::Database;
 use std::env;
 use dotenvy::dotenv;
 use std::net::SocketAddr;
+
 mod controller;
 mod models;
 mod utils;
-use utils::db::db_connect;
-
 mod routes;
+mod middleware;
+
+use utils::db::db_connect;
 use routes::router::create_router;
 
 #[tokio::main]
