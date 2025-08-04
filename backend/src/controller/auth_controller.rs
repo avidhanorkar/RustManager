@@ -1,12 +1,17 @@
-use crate::{models::user_model::User};
+use crate::models::user_model::User;
 use axum::{
-    extract::{Json, State},
-    http::StatusCode,
+    Json,
+    extract::{State},
+    http::{StatusCode},
 };
 use bcrypt::{DEFAULT_COST, hash, verify};
 use bson::*;
+use jsonwebtoken::{encode, EncodingKey, Header};
 use mongodb::{Collection, Database};
 use serde::{Deserialize, Serialize};
+use std::{env};
+use chrono::{Utc};
+
 
 #[derive(Deserialize)]
 pub struct RegisterRequest {
@@ -21,11 +26,26 @@ pub struct LoginRequest {
     password: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JWTClaims {
+    pub user_id: String,
+    pub username: String,
+    pub exp: usize,
+    pub iat: usize,
+}
+
 #[derive(Serialize)]
 pub struct AuthResponse {
     msg: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct LoginResponse {
+    msg: String,
+    user_id: String,
+    token: String,
 }
 
 pub async fn register(
@@ -117,7 +137,12 @@ pub async fn register(
 pub async fn login(
     State(db): State<Database>,
     Json(payload): Json<LoginRequest>,
-) -> Result<Json<AuthResponse>, (StatusCode, Json<AuthResponse>)> {
+) -> Result<Json<LoginResponse>, (StatusCode, Json<AuthResponse>)> {
+    let jwt_secret: String = env::var("JWT_SECRET")
+        .expect("JWT_SECRET must be set");
+
+    const TOKEN_EXPIRY: i64 = 24; //24hrs
+
     let collection: Collection<User> = db.collection("user");
     if payload.email.is_empty() || payload.password.is_empty() {
         return Err((
@@ -136,10 +161,37 @@ pub async fn login(
     match collection.find_one(filter).await {
         Ok(Some(user_found)) => match verify(&payload.password, &user_found.password) {
             Ok(true) => {
-                return Ok(Json(AuthResponse {
-                    msg: format!("The user logged in successfully with username, {}", user_found.username),
-                    id: user_found.user_id.map(|id| id.to_string()),
-                }));
+                let now = Utc::now();
+                let exp = now + chrono::Duration::hours(TOKEN_EXPIRY);
+
+                // jwt claims 
+                let claims = JWTClaims{
+                    user_id: user_found.user_id.map(|id| id.to_string()).unwrap_or_default(),
+                    username: user_found.username.clone(),
+                    exp: exp.timestamp() as usize,
+                    iat: now.timestamp() as usize,
+                };
+
+                match encode(
+                    &Header::default(), &claims, &EncodingKey::from_secret(jwt_secret.as_ref()) ){
+                        Ok(token) => {
+                            return Ok(Json(LoginResponse{
+                                msg: "Login Successful".to_string(),
+                                user_id: user_found.user_id.map(|id| id.to_string()).unwrap_or_default(),
+                                token,
+                            }));
+                        } Err(e) => {
+                            println!("Error while encoding JWT: {}", e);
+                            return Err((
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(AuthResponse {
+                                    msg: "Internal Server Error".to_string(),
+                                    id: None,
+                                }),
+                            ));
+                        }
+                    }
+
             }
             Ok(false) => {
                 return Err((
