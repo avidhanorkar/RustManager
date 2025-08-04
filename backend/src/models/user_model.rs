@@ -1,4 +1,6 @@
-use serde::{Serialize, Deserialize, Debug, Clone};
+use serde::{Serialize, Deserialize};
+use std::fmt::Debug;
+use std::clone::Clone;
 use bson::oid::ObjectId;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
