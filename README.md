@@ -2,9 +2,6 @@
 
 Well the project "Rust Manager" is a task manager which is a pretty basic one. But I am trying to learn Rust and I want to build a project which will help me learn Rust. So I decided to make a task manager such that with the help of this project I can learn the Axum framework on the go.
 
-
-A modern, secure task management system built with Rust, featuring JWT authentication, MongoDB integration, and a RESTful API.
-
 ## 🚀 Project Overview
 
 RustManager is a full-stack task management application that provides secure user authentication and task management capabilities. The backend is built with Rust using the Axum framework, MongoDB for data persistence, and JWT for secure authentication.
