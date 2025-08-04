@@ -1,9 +1,5 @@
 use axum::{
-    middleware::Next,
-    http::{Request, StatusCode},
-    response::Response,
-    body::Body,
-    Json,
+    body::Body, extract::FromRequestParts, http::{Request, StatusCode}, middleware::Next, response::Response, Json
 };
 use serde::{Serialize, Deserialize};
 use serde_json::json;
@@ -60,5 +56,23 @@ pub async fn auth_middleware (
                 Json(json!({"error": "Invalid token"}))
             ));
         }
+    }
+}
+
+// Extrayctor to get the user data from the middleware
+impl<S> FromRequestParts<S> for Claims 
+where S: Send + Sync {
+    type Rejection = (StatusCode, Json<serde_json::Value>);
+
+    async fn from_request_parts(parts: &mut axum::http::request::Parts, _state: &S,) -> Result<Self, Self::Rejection> {
+        if let Some(claims) = parts.extensions.get::<Claims>() {
+            Ok(claims.clone())
+        } else {
+            Err((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "Unauthorized"}))
+            ))
+        }
+        
     }
 }

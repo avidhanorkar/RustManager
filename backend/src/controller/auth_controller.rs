@@ -5,13 +5,16 @@ use axum::{
     http::{StatusCode},
 };
 use bcrypt::{DEFAULT_COST, hash, verify};
-use bson::*;
+use bson::{
+    doc,
+    oid::ObjectId,
+};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use mongodb::{Collection, Database};
 use serde::{Deserialize, Serialize};
 use std::{env};
 use chrono::{Utc};
-
+use crate::middleware::auth_middleware::Claims;
 
 #[derive(Deserialize)]
 pub struct RegisterRequest {
@@ -39,6 +42,13 @@ pub struct AuthResponse {
     msg: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct UserData {
+    pub username: String,
+    pub email: String,
+    pub tasks: Vec<ObjectId>, 
 }
 
 #[derive(Serialize)]
@@ -227,6 +237,56 @@ pub async fn login(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(AuthResponse {
                     msg: "Password Verification Failed".to_string(),
+                    id: None,
+                }),
+            ));
+        }
+    }
+}
+
+pub async fn get_user_data(
+    State(db): State<Database>,
+    claims: Claims,
+) -> Result<Json<UserData>, (StatusCode, Json<AuthResponse>)> {
+
+    let user_id = claims.user_id;
+    if user_id.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(AuthResponse {
+                msg: "User ID is required".to_string(),
+                id: None,
+            }),
+        ));
+    }
+
+    let collection:Collection<User> = db.collection("user");
+ 
+    let filter = doc! {
+        "_id": ObjectId::parse_str(&user_id).unwrap()
+    };
+
+    match collection.find_one(filter).await {
+        Ok(Some(user_found))  => {
+            return Ok(Json(UserData {
+                username: user_found.username,
+                email: user_found.email,
+                tasks: user_found.tasks, 
+            }))
+        } Ok(None) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(AuthResponse {
+                    msg: "User not found".to_string(),
+                    id: None,
+                }),
+            ));
+        } Err(e) => {
+            println!("Error while fetching user data: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(AuthResponse {
+                    msg: "Internal Server Error".to_string(),
                     id: None,
                 }),
             ));
